@@ -13,7 +13,11 @@ disable=
     broad-exception-caught
 
 [FORMAT]
-max-line-length=100
+max-line-length=120
+
+[DESIGN]
+max-nested-blocks=6
+max-args=6
 
 [REPORTS]
 output-format=colorized

@@ -61,3 +61,22 @@ Include the pylintrc file to exclude common false positives in my opinion.
 
 next, investigate the current functionality vs the actual requirements of the project, ensure we achieve the desired results.
 also, think about how to enhance functionality with tools like aiohttp that can handle large crawls, another impact is how filemanager will handle large amount of urls to save to a local file, needs to be scalable and efficient.
+think about rate limits to avoid being blocked by the target domain, also, include user agent headers to mimic a real world browser.
+
+
+Moved over to the async crawler, which is more suited to handle large sites, made the delay values a default setting, concurrency set as 3 as a default.
+Added user agent header, and a few other headers to mimic a real world browser.
+Took a look at filemanager and included iterative writing, to avoid crashing on large sites with thousands of links, ensuring scalability.
+store links in a folder for better organization, timestamp files too.
+Added centralized logging and timestamped log files in a logs directory for a more clean codebase and runtime insights.
+spent some time on the interactive version of the cli/crawler, which is a bit more user friendly and allows for better interaction with the user.
+
+
+
+**later improvements
+check if website retuning a 200, if not handle accordingly for userr feedback.
+store broken links and report them to the user
+
+add fastapi or similar to expose crawler via an api endpoint
+add a template file for non tech user to be able to interact via a simple frontend.
+
