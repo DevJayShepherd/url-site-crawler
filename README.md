@@ -7,8 +7,6 @@
 
 This crawler efficiently maps websites by identifying and traversing all links within a domain while ignoring external links and subdomains.
 
-
-
 ## ✨ Development Notes & Design Decisions
 
 ### 🛠️ Core Environment & Structure
@@ -67,7 +65,7 @@ This guide will help you get up and running with the Zego Site Crawler quickly.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/zego-site-crawler.git
+   git clone https://github.com/DevJayShepherd/zego-site-crawler.git
    cd zego-site-crawler
    ```
 
