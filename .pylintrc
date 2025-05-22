@@ -1,0 +1,19 @@
+[MESSAGES CONTROL]
+# Disable common false positives for Click and others
+# - no-value-for-parameter: Click CLI entrypoints
+# - broad-exception-caught: Sometimes needed for CLI safety
+# - C0114: missing-module-docstring
+# - C0115: missing-class-docstring
+# - C0116: missing-function-docstring
+disable=
+    C0114,
+    C0115,
+    C0116,
+    no-value-for-parameter,
+    broad-exception-caught
+
+[FORMAT]
+max-line-length=100
+
+[REPORTS]
+output-format=colorized

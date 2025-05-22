@@ -50,9 +50,3 @@ class WebCrawler:
                 )
                 found_urls.add(cleaned_url)
         return found_urls
-
-
-# Example usage:
-if __name__ == "__main__":
-    crawler = WebCrawler("https://affinity-website-fe-w4lnf.ondigitalocean.app")
-    print(crawler.get_same_domain_links())

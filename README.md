@@ -54,3 +54,10 @@ requirements.txt updated.
 Makefile added to run common tasks quickly.
 Use co-pilot to help with docstrings and basic exception handling.
 next: research online and implement a simple command line interface to run the crawler.
+click library installed for the CLI interaction, chosen as its part of Python's standard library and is well documented, reducing the need for extra dependencies.
+Added a simple command line interface to the WebCrawler class, allowing users to input a URL and start the crawling process, with some fallback and help options.
+Added a file manager class so users can save the results of the domain crawling to a file locally, in a few common formats, basic.
+Include the pylintrc file to exclude common false positives in my opinion.
+
+next, investigate the current functionality vs the actual requirements of the project, ensure we achieve the desired results.
+also, think about how to enhance functionality with tools like aiohttp that can handle large crawls, another impact is how filemanager will handle large amount of urls to save to a local file, needs to be scalable and efficient.
