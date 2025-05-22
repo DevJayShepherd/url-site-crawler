@@ -46,4 +46,11 @@ Instructions
 
 ---- 
 
-Installed anticipated core libraries for web crawling.
+Installed expected core libraries for web crawling.
+created application directory to store core app logic.
+Installed black and pylint for code formatting and linting.
+Started the WebCrawler class to handle the crawling logic, created with a single url currently.
+requirements.txt updated.
+Makefile added to run common tasks quickly.
+Use co-pilot to help with docstrings and basic exception handling.
+next: research online and implement a simple command line interface to run the crawler.
