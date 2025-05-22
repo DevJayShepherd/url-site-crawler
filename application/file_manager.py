@@ -6,10 +6,14 @@ import json
 import csv
 import os
 import shutil
-
 from tempfile import NamedTemporaryFile
+from typing import List, Set, Optional, TextIO, Iterator
 
 from application.logger import get_logger
+
+# Type aliases for clarity
+FilePath = str
+URL = str
 
 
 class FileManager:
@@ -23,16 +27,21 @@ class FileManager:
     logger = get_logger("FileManager")
 
     @staticmethod
-    def save(links, output_path, output_type=None, chunk_size=DEFAULT_CHUNK_SIZE):
+    def save(
+        links: Iterator[URL],
+        output_path: FilePath,
+        output_type: Optional[str] = None,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+    ) -> None:
         """
         Save links to a file in the specified output_type format.
         This method is primarily used for the initial file creation or non-incremental saves.
 
         Args:
-            links (iterable): The links to save.
-            output_path (str): The file path to save to.
-            output_type (str): 'json', 'csv', or 'text'. If None, inferred from extension.
-            chunk_size (int): Number of links to process in memory at once.
+            links: The links to save.
+            output_path: The file path to save to.
+            output_type: 'json', 'csv', or 'text'. If None, inferred from extension.
+            chunk_size: Number of links to process in memory at once.
         """
         # Create directory if it doesn't exist
         output_dir = os.path.dirname(output_path)
@@ -58,14 +67,18 @@ class FileManager:
             FileManager.save_text_stream(links, output_path, chunk_size)
 
     @staticmethod
-    def save_text_stream(links, output_path, chunk_size=DEFAULT_CHUNK_SIZE):
+    def save_text_stream(
+        links: Iterator[URL],
+        output_path: FilePath,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+    ) -> None:
         """
         Save links as plain text, one per line, using a streaming approach.
 
         Args:
-            links (iterable): The links to save.
-            output_path (str): The file path to save to.
-            chunk_size (int): Number of links to process in memory at once.
+            links: The links to save.
+            output_path: The file path to save to.
+            chunk_size: Number of links to process in memory at once.
         """
         try:
             with open(output_path, "w", encoding="utf-8") as f:
@@ -97,14 +110,18 @@ class FileManager:
             raise
 
     @staticmethod
-    def save_json_stream(links, output_path, chunk_size=DEFAULT_CHUNK_SIZE):
+    def save_json_stream(
+        links: Iterator[URL],
+        output_path: FilePath,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+    ) -> None:
         """
         Save links as a JSON array using a streaming approach to handle large datasets.
 
         Args:
-            links (iterable): The links to save.
-            output_path (str): The file path to save to.
-            chunk_size (int): Number of links to process in memory at once.
+            links: The links to save.
+            output_path: The file path to save to.
+            chunk_size: Number of links to process in memory at once.
         """
         try:
             # Create a temporary file with context manager
@@ -156,14 +173,14 @@ class FileManager:
             raise
 
     @staticmethod
-    def _write_json_batch(file, batch, first_item):
+    def _write_json_batch(file: TextIO, batch: List[URL], first_item: bool) -> None:
         """
         Helper method to write a batch of links to a JSON file.
 
         Args:
             file: The file to write to.
-            batch (list): The batch of links to write.
-            first_item (bool): Whether this is the first item in the JSON array.
+            batch: The batch of links to write.
+            first_item: Whether this is the first item in the JSON array.
         """
         for i, url in enumerate(batch):
             if not first_item or i > 0:
@@ -171,14 +188,18 @@ class FileManager:
             file.write(f'  "{url}"')
 
     @staticmethod
-    def save_csv_stream(links, output_path, chunk_size=DEFAULT_CHUNK_SIZE):
+    def save_csv_stream(
+        links: Iterator[URL],
+        output_path: FilePath,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+    ) -> None:
         """
         Save links as a CSV file with a single 'url' column using a streaming approach.
 
         Args:
-            links (iterable): The links to save.
-            output_path (str): The file path to save to.
-            chunk_size (int): Number of links to process in memory at once.
+            links: The links to save.
+            output_path: The file path to save to.
+            chunk_size: Number of links to process in memory at once.
         """
         try:
             with open(output_path, "w", newline="", encoding="utf-8") as f:
@@ -211,13 +232,13 @@ class FileManager:
             raise
 
     @staticmethod
-    def _append_text_link(link, output_path):
+    def _append_text_link(link: URL, output_path: FilePath) -> bool:
         """
         Append a link to a text file.
 
         Args:
-            link (str): The link to append.
-            output_path (str): Path to the text file.
+            link: The link to append.
+            output_path: Path to the text file.
 
         Returns:
             bool: True if the link was appended, False if it already existed.
@@ -234,13 +255,13 @@ class FileManager:
         return False
 
     @staticmethod
-    def _append_csv_link(link, output_path):
+    def _append_csv_link(link: URL, output_path: FilePath) -> bool:
         """
         Append a link to a CSV file.
 
         Args:
-            link (str): The link to append.
-            output_path (str): Path to the CSV file.
+            link: The link to append.
+            output_path: Path to the CSV file.
 
         Returns:
             bool: True if the link was appended, False if it already existed.
@@ -263,13 +284,13 @@ class FileManager:
         return False
 
     @staticmethod
-    def _append_json_link(link, output_path):
+    def _append_json_link(link: URL, output_path: FilePath) -> bool:
         """
         Append a link to a JSON file.
 
         Args:
-            link (str): The link to append.
-            output_path (str): Path to the JSON file.
+            link: The link to append.
+            output_path: Path to the JSON file.
 
         Returns:
             bool: True if the link was appended, False if it already existed.
@@ -309,41 +330,204 @@ class FileManager:
             raise e
 
     @staticmethod
-    def append_link(link, output_path, output_type=None):
+    def append_link(link: URL, output_path: FilePath) -> None:
         """
         Append a single link to an existing file.
-        This is the primary method used for incremental saving during crawling.
+        Creates the file if it doesn't exist.
 
         Args:
-            link (str): The link to append.
-            output_path (str): The file path to append to.
-            output_type (str): 'json', 'csv', or 'text'. If None, inferred from extension.
+            link: The link to append.
+            output_path: The file path to append to.
         """
-        # Ensure the file exists
-        if not os.path.exists(output_path):
-            FileManager.save([link], output_path, output_type)
-            return
-
-        # Determine output type if not specified
-        if output_type is None:
-            if output_path.endswith(".json"):
-                output_type = "json"
-            elif output_path.endswith(".csv"):
-                output_type = "csv"
-            else:
-                output_type = "text"
-
         try:
-            # Use the appropriate helper method based on file type
-            if output_type == "text":
-                FileManager._append_text_link(link, output_path)
-            elif output_type == "csv":
-                FileManager._append_csv_link(link, output_path)
-            elif output_type == "json":
-                FileManager._append_json_link(link, output_path)
+            # Create directory if it doesn't exist
+            output_dir = os.path.dirname(output_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+            # Determine file type
+            if output_path.endswith(".json"):
+                FileManager._append_json(link, output_path)
+            elif output_path.endswith(".csv"):
+                FileManager._append_csv(link, output_path)
             else:
-                raise ValueError(f"Unsupported output type: {output_type}")
+                # Default to text file
+                with open(output_path, "a", encoding="utf-8") as f:
+                    f.write(link + "\n")
+        except Exception as e:
+            FileManager.logger.error("Error appending link: %s", e)
+
+    @staticmethod
+    def _append_json(link: URL, output_path: FilePath) -> None:
+        """
+        Append a link to a JSON file.
+
+        Args:
+            link: The link to append.
+            output_path: Path to the JSON file.
+        """
+        try:
+            # If file doesn't exist or is empty, create it with an empty array
+            if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                with open(output_path, "w", encoding="utf-8") as f:
+                    json.dump([], f)
+
+            # Read existing data
+            with open(output_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Append the new link
+            data.append(link)
+
+            # Write back to file using temporary file for safety
+            with NamedTemporaryFile(
+                mode="w", delete=False, encoding="utf-8"
+            ) as temp_file:
+                temp_path = temp_file.name
+                json.dump(data, temp_file, indent=2)
+
+            # Move the temporary file to the final destination
+            shutil.move(temp_path, output_path)
 
         except Exception as e:
-            FileManager.logger.error("Error appending link to %s: %s", output_path, e)
-            raise
+            FileManager.logger.error("Error appending to JSON: %s", e)
+            # Clean up temp file if it exists
+            if "temp_path" in locals():
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+
+    @staticmethod
+    def _append_csv(link: URL, output_path: FilePath) -> None:
+        """
+        Append a link to a CSV file.
+
+        Args:
+            link: The link to append.
+            output_path: Path to the CSV file.
+        """
+        try:
+            # Check if file exists to determine if header is needed
+            file_exists = (
+                os.path.exists(output_path) and os.path.getsize(output_path) > 0
+            )
+
+            with open(output_path, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+
+                # Write header if file is new
+                if not file_exists:
+                    writer.writerow(["url"])
+
+                # Write the link
+                writer.writerow([link])
+
+        except Exception as e:
+            FileManager.logger.error("Error appending to CSV: %s", e)
+
+    @staticmethod
+    def save_page_links(page_url: URL, links: Set[URL], output_path: FilePath) -> None:
+        """
+        Save a page URL and its links in the specified format.
+        This matches the project requirement to show each page URL followed by its links.
+
+        Args:
+            page_url: The URL of the page.
+            links: The links found on the page.
+            output_path: The file path to save to.
+        """
+        try:
+            # Create directory if it doesn't exist
+            output_dir = os.path.dirname(output_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+            # Determine file type
+            if output_path.endswith(".json"):
+                FileManager._append_page_json(page_url, links, output_path)
+            elif output_path.endswith(".csv"):
+                FileManager._append_page_csv(page_url, links, output_path)
+            else:
+                # Default to text file
+                with open(output_path, "a", encoding="utf-8") as f:
+                    f.write(f"\nPage: {page_url}\n")
+                    f.write("Links found:\n")
+                    for link in links:
+                        f.write(f"  - {link}\n")
+                    f.write("-" * 40 + "\n")
+        except Exception as e:
+            FileManager.logger.error("Error saving page links: %s", e)
+
+    @staticmethod
+    def _append_page_json(
+        page_url: URL, links: Set[URL], output_path: FilePath
+    ) -> None:
+        """
+        Append a page and its links to a JSON file.
+        Creates the file with proper structure if it doesn't exist.
+
+        Args:
+            page_url: The URL of the page.
+            links: The links found on the page.
+            output_path: The file path to append to.
+        """
+        # Create empty file with proper structure if it doesn't exist
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump({"pages": []}, f)
+
+        try:
+            # Read the existing data
+            with open(output_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Add the new page and its links
+            data["pages"].append({"page_url": page_url, "links": list(links)})
+
+            # Write back the updated data
+            with NamedTemporaryFile(
+                mode="w", delete=False, encoding="utf-8"
+            ) as temp_file:
+                temp_path = temp_file.name
+                json.dump(data, temp_file, indent=2)
+
+            # Move the temporary file to the final destination
+            shutil.move(temp_path, output_path)
+
+        except Exception as e:
+            FileManager.logger.error("Error appending page to JSON: %s", e)
+            # Clean up temp file if it exists
+            if "temp_path" in locals():
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+
+    @staticmethod
+    def _append_page_csv(page_url: URL, links: Set[URL], output_path: FilePath) -> None:
+        """
+        Append a page and its links to a CSV file.
+        Creates the file with header if it doesn't exist.
+
+        Args:
+            page_url: The URL of the page.
+            links: The links found on the page.
+            output_path: The file path to append to.
+        """
+        file_exists = os.path.exists(output_path)
+
+        try:
+            with open(output_path, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+
+                # Write header if file is new
+                if not file_exists:
+                    writer.writerow(["source_page", "found_link"])
+
+                # Write each link with the source page
+                for link in links:
+                    writer.writerow([page_url, link])
+
+        except Exception as e:
+            FileManager.logger.error("Error appending page to CSV: %s", e)

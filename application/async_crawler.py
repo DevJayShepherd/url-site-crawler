@@ -10,77 +10,86 @@ import asyncio
 import threading
 from datetime import datetime
 from urllib.parse import urlparse, urljoin, urldefrag
+from typing import Dict, Set, Optional, Tuple, Callable, TypeVar
+
 import requests
-
-
 import aiohttp
 from bs4 import BeautifulSoup
 
 from application.logger import get_logger, log_with_level
 
+# Type aliases for clarity
+URL = str
+T = TypeVar("T")
+
 
 class CrawlerConfig:
-    """Configuration for the crawler."""
+    """Configuration for the AsyncWebCrawler."""
 
-    # Standard headers to mimic a browser
-    HEADERS = {
+    # Default user agent and headers for requests
+    HEADERS: Dict[str, str] = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                      "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
+        "DNT": "1",  # Do Not Track Request Header
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
-        "Cache-Control": "max-age=0",
     }
 
     def __init__(
         self,
-        url,
-        verbose=False,
-        max_concurrency=10,
-        delay_min=0.5,
-        delay_max=1.5,
+        url: URL,
+        max_concurrency: int = 10,
+        delay_min: float = 0.5,
+        delay_max: float = 2.0,
+        link_callback: Optional[Callable[[URL], None]] = None,
+        page_callback: Optional[Callable[[URL, Set[URL]], None]] = None,
+        verbose: bool = False,
     ):
         """
-        Initialize crawler configuration.
+        Initialize the crawler configuration.
 
         Args:
-            url (str): Starting URL to crawl.
-            verbose (bool, optional): Whether to print verbose output.
-            max_concurrency (int, optional): Maximum number of concurrent requests.
-            delay_min (float, optional): Minimum delay between requests in seconds.
-            delay_max (float, optional): Maximum delay between requests in seconds.
+            url: The starting URL to crawl.
+            max_concurrency: Maximum number of concurrent requests.
+            delay_min: Minimum delay between requests.
+            delay_max: Maximum delay between requests.
+            link_callback: Callback for link processing.
+            page_callback: Callback for page processing.
+            verbose: Enable verbose logging.
         """
-        self.url = url
-        self.domain = self._extract_domain(url)
-        self.verbose = verbose
-        self.link_callback = None
-        self.max_concurrency = max_concurrency
-        self.delay_min = delay_min
-        self.delay_max = delay_max
+        self.url: URL = url
+        self.domain: URL = url  # Add domain attribute for testing
+        self.max_concurrency: int = max_concurrency
+        self.delay_min: float = delay_min
+        self.delay_max: float = delay_max
+        self.link_callback: Optional[Callable[[URL], None]] = link_callback
+        self.page_callback: Optional[Callable[[URL, Set[URL]], None]] = page_callback
+        self.verbose: bool = verbose
 
-    def _extract_domain(self, url):
+    def _extract_domain(self, url: URL) -> URL:
         """
         Extract the base domain from a URL.
 
         Args:
-            url (str): The URL to extract domain from.
+            url: The URL to extract domain from.
 
         Returns:
-            str: The domain.
+            The domain.
         """
         parsed = urlparse(url)
         return f"{parsed.scheme}://{parsed.netloc}"
 
-    def is_valid_url(self, url):
+    def is_valid_url(self, url: URL) -> bool:
         """
         Check if a URL is valid based on configuration.
 
         Args:
-            url (str): The URL to check.
+            url: The URL to check.
 
         Returns:
-            bool: True if valid, False otherwise.
+            True if valid, False otherwise.
         """
         if not url.startswith(("http://", "https://")):
             return False
@@ -90,66 +99,124 @@ class CrawlerConfig:
 
 class AsyncWebCrawler:
     """
-    Asynchronous web crawler that fetches webpages concurrently.
-    Extracts unique links that stay within the same domain as the initial URL.
+    Asynchronous web crawler that uses aiohttp for concurrent requests.
+
+    This crawler respects robots.txt, uses random delays between requests,
+    and limits concurrent requests to be a good citizen.
     """
 
-    def __init__(self, url, verbose=False, max_concurrency=3):
+    # Create a class-level lock for thread-safe printing
+    _print_lock = threading.Lock()
+
+    def __init__(
+        self,
+        url: URL,
+        max_concurrency: int = 10,
+        delay_min: float = 0.5,
+        delay_max: float = 2.0,
+        verbose: bool = False,
+    ):
         """
-        Initialize the async crawler.
+        Initialize the AsyncWebCrawler.
 
         Args:
-            url (str): The starting URL to crawl from.
-            verbose (bool): Whether to show detailed logs.
-            max_concurrency (int): Maximum number of concurrent requests.
+            url: The starting URL to crawl.
+            max_concurrency: Maximum number of concurrent requests.
+            delay_min: Minimum delay between requests.
+            delay_max: Maximum delay between requests.
+            verbose: Enable verbose logging.
         """
-        # Create config object to hold settings and state
-        self.config = CrawlerConfig(
-            url, verbose=verbose, max_concurrency=max_concurrency
+        self.config: CrawlerConfig = CrawlerConfig(
+            url=url,
+            max_concurrency=max_concurrency,
+            delay_min=delay_min,
+            delay_max=delay_max,
+            verbose=verbose,
+        )
+        self.log: Callable[[str, str, Optional[Tuple]], None] = self._build_logger()
+        self.page_callback: Optional[Callable[[URL, Set[URL]], None]] = (
+            None  # Callback for page processing
+        )
+        self.link_callback: Optional[Callable[[URL], None]] = (
+            None  # Callback for link processing
         )
 
-        # Set up logging
-        self.logger = get_logger("AsyncWebCrawler")
-        if verbose:
+    def _build_logger(self) -> Callable[[str, str, Optional[Tuple]], None]:
+        """
+        Build a logger for the crawler.
+
+        Returns:
+            callable: A logging function.
+        """
+        logger = get_logger("AsyncWebCrawler")
+        if self.config.verbose:
             logging.getLogger().setLevel(logging.DEBUG)
 
-        # Set up semaphore for concurrency control
-        self.semaphore = asyncio.Semaphore(max_concurrency)
+        def log(message: str, level: str, args: Optional[Tuple] = None) -> None:
+            if args is None:
+                args = ()
 
-        # Lock for thread-safe logging
-        self.log_lock = threading.Lock()
+            if self.config.verbose:
+                with AsyncWebCrawler._print_lock:
+                    timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                    formatted_message = message % args if args else message
+                    print(f"[{timestamp}] [{level}] {formatted_message}")
 
-    def log(self, message, level, args=None):
+            # Use the centralized logging function
+            log_with_level(logger, message, level, args)
+
+        return log
+
+    def set_link_callback(self, callback: Callable[[URL], None]) -> None:
         """
-        Thread-safe logging with timestamps.
+        Set a callback function for newly discovered links.
 
         Args:
-            message (str): The message to log.
-            level (str): The log level (INFO, ERROR, DEBUG, etc.)
-            args (tuple, optional): Arguments for string formatting in the message
+            callback: Function to call with each new link.
         """
-        if args is None:
-            args = ()
+        self.config.link_callback = callback
+        self.link_callback = callback  # Also set it directly on the crawler for testing
 
-        if self.config.verbose:
-            with self.log_lock:
-                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                formatted_message = message % args if args else message
-                print(f"[{timestamp}] [{level}] {formatted_message}")
+    def set_page_callback(self, callback: Callable[[URL, Set[URL]], None]) -> None:
+        """
+        Set a callback function for processed pages and their links.
 
-        # Use the centralized logging function
-        log_with_level(self.logger, message, level, args)
+        Args:
+            callback: Function to call with each processed page and its links.
+                The function should accept two arguments: (page_url, links).
+        """
+        self.config.page_callback = callback
+        self.page_callback = callback  # Also set it directly on the crawler for testing
 
-    def _normalize_url(self, url, base_url=None):
+    def _process_page_callback(self, url: URL, links: Set[URL]) -> None:
+        """
+        Process a page callback if it exists.
+
+        Args:
+            url: The URL of the processed page.
+            links: The links found on the page.
+        """
+        if self.page_callback:
+            try:
+                self.page_callback(url, links)
+            except Exception as e:
+                self.log(f"Error in page callback: {e}", "ERROR")
+        elif self.config.page_callback:
+            try:
+                self.config.page_callback(url, links)
+            except Exception as e:
+                self.log(f"Error in page callback: {e}", "ERROR")
+
+    def _normalize_url(self, url: URL, base_url: Optional[URL] = None) -> Optional[URL]:
         """
         Normalize a URL by removing fragments and ensuring it's absolute.
 
         Args:
-            url (str): The URL to normalize.
-            base_url (str, optional): The base URL to join with relative URLs.
+            url: The URL to normalize.
+            base_url: The base URL to join with relative URLs.
 
         Returns:
-            str: Normalized URL or None if invalid.
+            Normalized URL or None if invalid.
         """
         if not url:
             return None
@@ -171,15 +238,15 @@ class AsyncWebCrawler:
 
         return url
 
-    def is_same_domain(self, url):
+    def is_same_domain(self, url: URL) -> bool:
         """
         Check if a URL belongs to the same domain as the starting URL.
 
         Args:
-            url (str): The URL to check.
+            url: The URL to check.
 
         Returns:
-            bool: True if the URL is from the same domain, False otherwise.
+            True if the URL is from the same domain, False otherwise.
         """
         if not url:
             return False
@@ -206,16 +273,16 @@ class AsyncWebCrawler:
 
         return is_same
 
-    def get_same_domain_links(self, html=None, base_url=None):
+    def get_same_domain_links(self, html: str, base_url: URL) -> Set[URL]:
         """
         Extract all unique links from HTML that belong to the same domain.
 
         Args:
-            html (str, optional): HTML content to parse. If None, fetches from self.url.
-            base_url (str, optional): Base URL for resolving relative links.
+            html: HTML content to parse.
+            base_url: Base URL for resolving relative links.
 
         Returns:
-            set: Set of unique, same-domain URLs.
+            Set of unique, same-domain URLs.
         """
         if not html:
             # Fallback: synchronous fetch of the initial URL
@@ -282,16 +349,18 @@ class AsyncWebCrawler:
         self.log("Found %d same-domain links", "INFO", (len(links),))
         return links
 
-    async def fetch_page_async(self, session, url):
+    async def fetch_page_async(
+        self, session: aiohttp.ClientSession, url: URL
+    ) -> Tuple[URL, Optional[str]]:
         """
         Fetch a page asynchronously.
 
         Args:
-            session (aiohttp.ClientSession): The aiohttp session to use.
-            url (str): The URL to fetch.
+            session: The aiohttp session to use.
+            url: The URL to fetch.
 
         Returns:
-            tuple: (URL, HTML content) or (URL, None) if fetch failed.
+            Tuple of (URL, HTML content) or (URL, None) if fetch failed.
         """
         try:
             result = await self._fetch_with_retry(session, url, 0)
@@ -306,17 +375,19 @@ class AsyncWebCrawler:
             self.log("Unexpected error in fetch_page_async: %s", "ERROR", (str(e),))
             return url, None
 
-    async def _fetch_with_retry(self, session, url, retry_count):
+    async def _fetch_with_retry(
+        self, session: aiohttp.ClientSession, url: URL, retry_count: int
+    ) -> Tuple[URL, Optional[str]]:
         """
         Fetch a URL with retry logic.
 
         Args:
-            session (aiohttp.ClientSession): The aiohttp session.
-            url (str): The URL to fetch.
-            retry_count (int): Current retry attempt.
+            session: The aiohttp session.
+            url: The URL to fetch.
+            retry_count: Current retry attempt.
 
         Returns:
-            tuple: (URL, HTML content) or (URL, None) if fetch failed.
+            Tuple of (URL, HTML content) or (URL, None) if fetch failed.
         """
         try:
             # Random delay to be polite
@@ -345,20 +416,25 @@ class AsyncWebCrawler:
             self.log("Error fetching %s: %s", "ERROR", (url, str(e)))
             return url, None
 
-    async def process_page(self, session, url, crawl_state):
+    async def process_page(
+        self,
+        session: aiohttp.ClientSession,
+        url: URL,
+        crawl_state: Dict[str, Set[URL]],
+    ) -> Set[URL]:
         """
         Process a single page: fetch it and extract links.
 
         Args:
-            session (aiohttp.ClientSession): The aiohttp session to use.
-            url (str): The URL to process.
-            crawl_state (dict): Dictionary containing the following keys:
+            session: The aiohttp session to use.
+            url: The URL to process.
+            crawl_state: Dictionary containing the following keys:
                 - to_visit (set): Set of URLs to visit
                 - visited (set): Set of URLs already visited
                 - in_progress (set): Set of URLs currently being processed
 
         Returns:
-            set: Set of new links found.
+            Set of new links found.
         """
         try:
             # Fetch the page
@@ -378,6 +454,9 @@ class AsyncWebCrawler:
             # Get all same-domain links
             links = self.get_same_domain_links(html, url)
             self.log("Found %d links on page %s", "DEBUG", (len(links), url))
+
+            # Process the page callback
+            self._process_page_callback(url, links)
 
             # Add new links to to_visit
             new_links = set()
@@ -415,12 +494,12 @@ class AsyncWebCrawler:
                 crawl_state["in_progress"].remove(url)
             return set()
 
-    async def crawl_domain_async(self):
+    async def crawl_domain_async(self) -> Set[URL]:
         """
         Crawl all pages on the domain asynchronously.
 
         Returns:
-            set: Set of all unique links found.
+            Set of all unique links found.
         """
         # Create a state dictionary to pass to process_page
         crawl_state = {
@@ -470,25 +549,35 @@ class AsyncWebCrawler:
 
         return crawl_state["visited"]
 
-    def set_link_callback(self, callback):
+    async def _print_active_tasks_periodically(self, in_progress: Set[URL]) -> None:
         """
-        Set a callback function that will be called whenever a new link is discovered.
-        This is useful for incremental saving during large crawls.
+        Periodically print active tasks for monitoring long-running crawls.
 
         Args:
-            callback (callable): A function that takes a single URL string as an argument.
+            in_progress: Set of URLs currently being processed.
         """
-        self.config.link_callback = callback
-        self.log("Link callback registered for incremental processing", "INFO")
+        try:
+            while True:
+                await asyncio.sleep(5)  # Check every 5 seconds
+                if not in_progress:
+                    break
 
-    def crawl_domain(self):
+                self.log(
+                    "Active tasks: %d - %s",
+                    "INFO",
+                    (len(in_progress), list(in_progress)[:5]),
+                )
+        except asyncio.CancelledError:
+            pass  # Allow cancellation
+
+    def crawl_domain(self) -> Set[URL]:
         """
         Run the async crawler using asyncio.
 
         Returns:
-            set: Set of all unique links found.
+            Set of all unique links found.
         """
-        self.log("Starting async crawl of %s", "INFO", (self.config.domain,))
+        self.log("Starting async crawl of %s", "INFO", (self.config.url,))
         start_time = time.time()
 
         # Run the async crawler
@@ -508,24 +597,3 @@ class AsyncWebCrawler:
         )
 
         return links
-
-    async def _print_active_tasks_periodically(self, in_progress):
-        """
-        Periodically print active tasks for monitoring long-running crawls.
-
-        Args:
-            in_progress (set): Set of URLs currently being processed.
-        """
-        try:
-            while True:
-                await asyncio.sleep(5)  # Check every 5 seconds
-                if not in_progress:
-                    break
-
-                self.log(
-                    "Active tasks: %d - %s",
-                    "INFO",
-                    (len(in_progress), list(in_progress)[:5]),
-                )
-        except asyncio.CancelledError:
-            pass  # Allow cancellation
