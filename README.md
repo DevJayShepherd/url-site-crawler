@@ -7,6 +7,15 @@
 
 This crawler efficiently maps websites by identifying and traversing all links within a domain while ignoring external links and subdomains.
 
+## ⭐ Key Features
+
+- **🚄 Asynchronous Performance**: Uses `aiohttp` and `asyncio` for concurrent requests with configurable concurrency limits
+- **💾 Efficient File Management**: Handles large-scale crawling through streaming writes and incremental saves
+- **🔒 Same-Domain Focus**: Only processes links within the specified domain, ignoring external sites and subdomains
+- **🧩 Multiple Output Formats**: Save results as TXT, CSV, or JSON with automatic file handling
+- **👤 Interactive Mode**: User-friendly CLI interface for guided crawling operations
+- **📝 Comprehensive Logging**: Detailed logs for troubleshooting and performance analysis
+
 ## ✨ Development Notes & Design Decisions
 
 ### 🛠️ Core Environment & Structure
@@ -66,7 +75,6 @@ This guide will help you get up and running with the Zego Site Crawler quickly.
 1. Clone the repository:
    ```bash
    git clone https://github.com/DevJayShepherd/zego-site-crawler.git
-   cd zego-site-crawler
    ```
 
 2. Set up the environment:
