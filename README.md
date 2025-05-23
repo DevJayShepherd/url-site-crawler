@@ -66,6 +66,18 @@ This crawler efficiently maps websites by identifying and traversing all links w
 - Improve logging for better monitoring and debugging.
 - Improve exception and error handling to cover more edge cases.
 
+## 🔧 Development Environment
+
+This project was developed using the following tools and environment:
+
+- **Operating System**: Ubuntu 24.04.2 LTS
+- **IDE**: PyCharm
+- **AI Assistance**:
+  - GitHub Copilot for code suggestions, docstrings, and boilerplate code
+  - Junie for architecture advice and debugging assistance
+
+The combination of PyCharm's powerful Python tools and AI assistance helped streamline development, particularly for repetitive tasks like type hinting and documentation, while ensuring code quality and consistency throughout the project.
+
 ## 🏁 Getting Started
 
 This guide will help you get up and running with the Zego Site Crawler quickly.
