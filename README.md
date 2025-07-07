@@ -1,4 +1,4 @@
-# 🕸️ Zego Site Crawler
+# 🕸️ Site URL Crawler
 
 > A fast, efficient web crawler built with Python
 
